@@ -23,7 +23,7 @@ test_that("learners work: classif ", {
   # binary classif
   task = subsetTask(binaryclass.task, subset = c(10:20, 180:190),
     features = getTaskFeatureNames(binaryclass.task)[12:15])
-  lrns = mylist(task, create = TRUE)
+  lrns = mylist(task, create = TRUE, properties = "oneclass")
   lapply(lrns, testThatLearnerParamDefaultsAreInParamSet)
   lapply(lrns, testBasicLearnerProperties, task = task, hyperpars = hyperpars)
 

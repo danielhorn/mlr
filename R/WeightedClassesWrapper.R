@@ -22,13 +22,10 @@
 #' We set this weight depending on the class internally in the wrapper. Basically we introduce
 #' something like a new \dQuote{class.weights} parameter for the learner via observation weights.
 #'
+#' If a) is possible for the learner it is used, otherwise b) is used, otherwise an error is created.
+#' For model multiplexer this decision is made for each base learner individualy
+#'
 #' @template arg_learner_classif
-#' @param wcw.param [\code{character(1)}]\cr
-#'   Name of already existing learner parameter, which allows class weighting.
-#'   The default (\code{wcw.param = NULL}) will use the parameter defined in
-#'   the learner (\code{class.weights.param}). During training, the parameter
-#'   must accept a named vector of class weights, where length equals the
-#'   number of classes.
 #' @param wcw.weight [\code{numeric}]\cr
 #'   Weight for each class.
 #'   Must be a vector of the same number of elements as classes are in task,
@@ -53,7 +50,7 @@
 #' print(calculateConfusionMatrix(res$pred))
 #'
 #' # tuning the imbalancy param and the SVM param in one go
-#' lrn = makeWeightedClassesWrapper("classif.ksvm", wcw.param = "class.weights")
+#' lrn = makeWeightedClassesWrapper("classif.ksvm")
 #' ps = makeParamSet(
 #'   makeNumericParam("wcw.weight", lower = 1, upper = 10),
 #'   makeNumericParam("C", lower = -12, upper = 12, trafo = function(x) 2^x),
@@ -64,23 +61,22 @@
 #' res = tuneParams(lrn, sonar.task, rdesc, par.set = ps, control = ctrl)
 #' print(res)
 #' print(res$opt.path)
-makeWeightedClassesWrapper = function(learner, wcw.param = NULL, wcw.weight = 1) {
-  learner = checkLearnerClassif(learner)
+makeWeightedClassesWrapper = function(learner, wcw.weight = 1) {
+  learner =  checkLearner(learner, type = "classif")
   pv = list()
-
-  if (is.null(wcw.param))
-    wcw.param = learner$class.weights.param
-  else if (!is.null(learner$class.weights.param) && (learner$class.weights.param != wcw.param))
-    stopf("wcw.param (%s) differs from the class.weights.parameter (%s) of the learner!",
-      wcw.param, learner$class.weights.param)
-
-  if (is.null(wcw.param)) {
-    if (!hasLearnerProperties(learner, "weights"))
-      stopf("Learner '%s' does not support observation weights. You have to set 'wcw.param' to the learner param which allows to set class weights! (which hopefully exists...)", learner$id)
-  } else {
-    assertSubset(wcw.param, getParamIds(learner$par.set))
+  
+  # check: learner is not already wrapped in weighted classes wrapper
+  if ("WeightedClassesWrapper" %in% class(learner)) {
+    stop("Learner already has a weighted classes wrapper")
   }
-
+  
+  # each (base) learner must support either weights or class.weights
+  lrns = if (is.null(learner$base.learners)) list(learner) else learner$base.learners
+  sapply(lrns, function(lrn) {
+    if (!any(hasLearnerProperties(lrn, c("weights", "class.weights")))) {
+      stopf("Learner '%s' does neither support class nor observation weights.", lrn$id)
+    }})
+  
   if (!missing(wcw.weight)) {
     assertNumeric(wcw.weight, lower = 0, any.missing = FALSE)
     pv$wcw.weight = wcw.weight
@@ -91,7 +87,6 @@ makeWeightedClassesWrapper = function(learner, wcw.param = NULL, wcw.weight = 1)
   )
   x = makeBaseWrapper(id, learner$type, learner, package = learner$package, par.set = ps, par.vals = pv,
     learner.subclass = "WeightedClassesWrapper", model.subclass = "WeightedClassesModel")
-  x$wcw.param = wcw.param
   x
 }
 
@@ -100,7 +95,7 @@ trainLearner.WeightedClassesWrapper = function(.learner, .task, .subset, .weight
   .task = subsetTask(.task, .subset)
   td = getTaskDescription(.task)
   levs = td$class.levels
-  p = .learner$wcw.param
+  wcw.param = getParamIds(getClassWeightParam(.learner))
   if (length(levs) == 2L) {
     assertNumber(wcw.weight, lower = 0)
     wcw.weight = c(wcw.weight, 1)
@@ -109,12 +104,12 @@ trainLearner.WeightedClassesWrapper = function(.learner, .task, .subset, .weight
     assertNumeric(wcw.weight, len = length(levs), lower = 0)
     names(wcw.weight) = levs
   }
-  if (is.null(p)) {
+  if (is.null(wcw.param)) {
     y = as.character(getTaskTargets(.task))
     weights = wcw.weight[y]
     m = train(.learner$next.learner, task = .task, weights = weights)
   } else {
-    .learner = setHyperPars(.learner, par.vals = setNames(list(wcw.weight), p))
+    .learner = setHyperPars(.learner, par.vals = setNames(list(wcw.weight), wcw.param))
     m = train(.learner$next.learner, task = .task)
   }
   makeChainModel(next.model = m, cl = "WeightedClassesModel")
@@ -124,3 +119,11 @@ trainLearner.WeightedClassesWrapper = function(.learner, .task, .subset, .weight
 getLearnerProperties.WeightedClassesWrapper = function(learner) {
   setdiff(getLearnerProperties(learner$next.learner), "weights")
 }
+
+#' @export 
+getClassWeightParam.WeightedClassesWrapper = function(learner) {
+  # Weighted Classes Wrapper does not know its class weight param, but the wrapped learner does!
+  getClassWeightParam(learner$next.learner)
+}
+
+

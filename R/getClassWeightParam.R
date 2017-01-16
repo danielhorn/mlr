@@ -4,8 +4,9 @@
 #' Gets the class weight parameter of a learner.
 #'
 #' @template arg_learner
-#' @return [\code{numeric \link{LearnerParam}}]:
+#' @return [\code{numeric \link{LearnerParam} || NULL} ]:
 #'   A numeric parameter object, containing the class weight parameter of the given learner.
+#'   NULL, if the learner does not support class weighting
 #' @family learner
 #' @export
 getClassWeightParam = function(learner) {
@@ -18,6 +19,9 @@ getClassWeightParam = function(learner) {
 
 #' @export
 getClassWeightParam.Learner = function(learner) {
-  assertChoice("class.weights", getLearnerProperties(learner))
-  learner$par.set$pars[[learner$class.weights.param]]
+  if("class.weights" %nin% getLearnerProperties(learner)){
+    NULL
+  } else {
+    learner$par.set$pars[[learner$class.weights.param]]
+  }
 }

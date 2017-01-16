@@ -129,7 +129,14 @@ isFailureModel.ModelMultiplexerModel = function(model) {
 
 #' @export
 getClassWeightParam.ModelMultiplexer = function(learner) {
+  # get class weight param of selected learner
   sl = getHyperPars(learner)$selected.learner
   bl = learner$base.learners[[sl]]
-  getClassWeightParam(bl)
+  wcw = getClassWeightParam(bl)
+  # select the correct param in the param set of the multiplexer
+  if (!is.null(wcw)) {
+    id = paste(sl, getParamIds(wcw), sep = ".")
+    wcw = getParamSet(learner)$pars[[id]]
+  }
+  wcw
 }

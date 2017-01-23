@@ -107,7 +107,8 @@ trainLearner.WeightedClassesWrapper = function(.learner, .task, .subset, .weight
   if (is.null(wcw.param)) {
     y = as.character(getTaskTargets(.task))
     weights = wcw.weight[y]
-    m = train(.learner$next.learner, task = .task, weights = weights)
+    next.learner = .learner$next.learner
+    m = train(next.learner, task = .task, weights = weights)
   } else {
     .learner = setHyperPars(.learner, par.vals = setNames(list(wcw.weight), getParamIds(wcw.param)))
     m = train(.learner$next.learner, task = .task)

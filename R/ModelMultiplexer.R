@@ -140,3 +140,11 @@ getClassWeightParam.ModelMultiplexer = function(learner) {
   }
   wcw
 }
+
+#' @export
+getLearnerProperties.ModelMultiplexer = function(learner) {
+  sl = getHyperPars(learner)$selected.learner
+  bl = learner$base.learners[[sl]]
+  bl$properties
+}
+
